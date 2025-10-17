@@ -1,0 +1,132 @@
+/* Общие правила удобной вёрстки */
+* { box-sizing: border-box; }
+
+body {
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: "Segoe UI", sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  padding-top: 50px;
+  margin: 0;
+}
+
+.container {
+  background: #1e293b;
+  padding: 30px;
+  border-radius: 15px;
+  box-shadow: 0 0 20px rgba(0,0,0,0.4);
+  width: 80%;
+  max-width: 1000px; /* чуть больше для десктопа */
+}
+
+h1 {
+  text-align: center;
+  color: #60a5fa;
+}
+
+form {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+input[type=file] {
+  margin: 10px;
+  color: #cbd5e1;
+}
+
+button {
+  background: #3b82f6;
+  border: none;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+button:hover {
+  background: #2563eb;
+}
+
+/* Основной блок отчёта */
+.report {
+  background: #0f172a;
+  padding: 15px;
+  border-radius: 10px;
+  margin-top: 10px;
+
+  /* Перенос и ограничение по ширине/высоте: */
+  white-space: pre-wrap;        /* сохраняет переводы строк, но позволяет перенос */
+  word-wrap: break-word;       /* переносит длинные "словa" */
+  overflow-wrap: anywhere;     /* современный стандарт — разрешает перенос внутри слов */
+  word-break: break-word;      /* запасной вариант для старых движков */
+
+  /* Ограничения размера и скроллбар при необходимости */
+  max-width: 100%;
+  max-height: 65vh;           /* отчёт будет занимать не более 65% высоты окна */
+  overflow: auto;             /* появится скролл, если контент большой */
+
+  /* Визуальная тонкая граница, чтобы видеть края блока */
+  border: 1px solid rgba(71,85,105,0.25);
+}
+
+/* Чтобы <pre> и <code> не ломали контейнер */
+.report pre,
+.report code {
+  white-space: pre-wrap !important;    /* перенос строк внутри pre/code */
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+  max-width: 100%;
+  margin: 0 0 8px 0;
+  background: rgba(255,255,255,0.02);
+  padding: 8px;
+  border-radius: 6px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+}
+
+/* Таблицы отчёта — всегда занимают ширину и фикс. layout, колонки переносятся */
+.report table {
+  width: 100%;
+  table-layout: fixed; /* фиксированная раскладка колонок, чтобы не ломать контейнер */
+  border-collapse: collapse;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.report th,
+.report td {
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid rgba(71,85,105,0.12);
+}
+
+/* Картинки — масштабируемся по контейнеру */
+.report img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 8px 0;
+  border-radius: 6px;
+}
+
+/* Ошибки и предупреждения */
+.error {
+  color: #f87171;
+  background: #450a0a;
+  padding: 10px;
+  border-radius: 8px;
+  margin-top: 10px;
+}
+
+/* Адаптив для маленьких экранов */
+@media (max-width: 700px) {
+  .container { width: 95%; padding: 18px; }
+  .report { max-height: 55vh; padding: 12px; }
+}

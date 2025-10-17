@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>BinScanner Web</title>
+<style>
+/* (стили аналогичны предыдущей версии; опущу повторные пояснения) */
+:root{--bg:#0f172a;--panel:#1e293b;--accent:#2563eb;--muted:#94a3b8;--text:#e2e8f0;--green:#00ff6a;}
+html,body{height:100%;margin:0;font-family:"Segoe UI",Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);overflow:hidden;}
+canvas#matrix{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0.12;mix-blend-mode:screen;filter:blur(0.6px) contrast(1.1);transition:opacity .25s ease;background:linear-gradient(180deg, rgba(0,0,0,0.12), rgba(0,0,0,0.25));}
+.container{position:relative;z-index:2;max-width:980px;margin:32px auto;padding:26px;background:linear-gradient(180deg, rgba(15,23,42,0.96), rgba(15,23,42,0.88));border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6);overflow:hidden;}
+header h1{margin:0 0 14px 0;text-align:center;color:#93c5fd;font-size:24px;letter-spacing:0.2px;}
+.upload-section{display:flex;justify-content:center;gap:12px;align-items:center;margin-bottom:20px;}
+input[type=file]{display:none;}
+.btn-file{background:var(--accent);color:#fff;padding:10px 14px;border-radius:8px;cursor:pointer;font-weight:600;border:none;box-shadow:0 4px 8px rgba(37,99,235,0.12);}
+.btn-submit{background:#16a34a;color:#fff;padding:10px 14px;border-radius:8px;border:none;font-weight:600;cursor:pointer;}
+.btn-clear{background:#64748b;color:#fff;padding:10px 14px;border-radius:8px;border:none;font-weight:600;cursor:pointer;}
+.btn-download{background:#2563eb;color:#fff;padding:10px 14px;border-radius:8px;border:none;font-weight:600;cursor:pointer;box-shadow:0 4px 8px rgba(37,99,235,0.12);}
+.error{color:#f87171;text-align:center;margin-bottom:12px;font-weight:600}
+.report-area{background:rgba(2,6,23,0.14);border-radius:8px;padding:16px;min-height:120px;max-height:540px;overflow:auto;font-size:15px;line-height:1.55;color:var(--text);}
+.info-box{padding:10px;border-radius:8px;background: rgba(96,165,250,0.06);color: var(--text);border: 1px solid rgba(96,165,250,0.12);margin-bottom:12px;}
+.error-box{padding:10px;border-radius:8px;background: rgba(248,113,113,0.06);color: var(--text);border: 1px solid rgba(248,113,113,0.12);margin-bottom:12px;}
+.severity-High{ color:#ff6b6b; font-weight:700 }
+.severity-Medium{ color:#fbbf24; font-weight:700 }
+.severity-Low{ color:#60a5fa; font-weight:700 }
+.severity-Info{ color:#94a3b8; font-weight:700 }
+pre.report{margin:0;font-family:"Consolas","Courier New",monospace;white-space:pre-wrap;word-wrap:break-word;color:var(--text);}
+
+/* progress bar */
+.progress-wrap { width:100%; margin: 6px 0 14px 0; display:block; }
+.progress { background: rgba(255,255,255,0.06); height: 12px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,0.03);}
+.progress > span { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, #34d399, #10b981); transition: width 260ms linear; }
+
+/* bottom-left toggle */
+.bg-toggle { position:fixed; left:18px; bottom:18px; z-index:3; background:rgba(15,23,42,0.92); color:var(--text); padding:8px 12px; border-radius:10px; border:1px solid rgba(71,85,105,0.12); display:flex; gap:10px; align-items:center; box-shadow:0 6px 20px rgba(2,6,23,0.5); cursor:pointer; font-weight:600; }
+.bg-toggle .dot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);opacity:0.9;}
+.bg-toggle.off .dot{background:#6b7280;box-shadow:none;opacity:0.7;}
+
+@media (max-width:720px){ .container{margin:14px;padding:16px} header h1{font-size:20px} .report-area{font-size:13px} .bg-toggle{left:10px;bottom:10px;padding:6px 8px} }
+</style>
+</head>
+<body>
+<canvas id="matrix" aria-hidden="true"></canvas>
+
+<div class="container" role="main">
+    <header><h1>BinScanner Web — анализ PE (.exe / .dll)</h1></header>
+
+    <section class="upload-section" aria-label="upload">
+        <form id="uploadForm" action="/start_scan" method="post" enctype="multipart/form-data" style="display:flex;align-items:center;gap:10px">
+            <input type="file" name="file" id="fileInput" accept=".exe,.dll" />
+            <label class="btn-file" for="fileInput">Выбрать файл</label>
+            <button type="submit" class="btn-submit">Сканировать</button>
+            <button type="button" id="clearBtn" class="btn-clear">Очистить</button>
+            <button type="button" id="downloadBtn" class="btn-download" style="display:none;margin-left:6px">Скачать отчёт</button>
+        </form>
+    </section>
+
+    <div id="fileInfo" style="text-align:center; margin-bottom:8px; color:var(--muted); font-weight:600; display:none;">
+        Файл: <span id="fileName" style="color:var(--text)"></span>
+    </div>
+
+    <div class="report-area" id="reportArea" aria-live="polite" style="display:none;">
+        <div class="progress-wrap" id="progressWrap" style="display:none;">
+            <div class="progress"><span id="progressBar" style="width:0%"></span></div>
+            <div id="progressLabel" style="font-size:13px;color:var(--muted);margin-top:6px;">Подготовка...</div>
+        </div>
+
+        <div id="content-html" style="display:none;"></div>
+    </div>
+</div>
+
+<div id="bgToggle" class="bg-toggle" title="Отключить/включить живые обои" role="button" aria-pressed="true">
+    <span class="dot" aria-hidden="true"></span>
+    <div id="bgToggleLabel">Живые обои: Вкл</div>
+</div>
+
+<script>
+/* MATRIX BACKGROUND (unchanged robust implementation) */
+(function(){
+    const canvas = document.getElementById('matrix');
+    const ctx = canvas.getContext('2d', { alpha: true });
+    let width = canvas.width = innerWidth, height = canvas.height = innerHeight;
+    function recompute(){ width=canvas.width=innerWidth; height=canvas.height=innerHeight; }
+    let fontSize = Math.max(10, Math.min(20, Math.floor(width / 80)));
+    let cols = Math.floor(width / fontSize);
+    let drops = new Array(cols).fill(0).map(()=> Math.random()*height);
+    const chars = "0123456789абвгдежзийклмнопрстуфхцчшщъыьэюяABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const charsArr = chars.split('');
+    let rafId = null, matrixRunning = false;
+    function draw(){
+        if(!matrixRunning){ rafId=null; return; }
+        ctx.fillStyle = "rgba(0,0,0,0.12)"; ctx.fillRect(0,0,width,height);
+        ctx.shadowColor="#00ff6a"; ctx.shadowBlur=10;
+        for(let i=0;i<drops.length;i++){
+            const x=i*fontSize; const y=(drops[i]|0)*fontSize;
+            const txt=charsArr[Math.floor(Math.random()*charsArr.length)];
+            ctx.fillStyle="rgba(200,255,200,0.95)"; ctx.fillText(txt,x,y);
+            ctx.fillStyle="rgba(0,255,106,0.65)"; ctx.fillText(txt,x,y-fontSize);
+            drops[i]=drops[i]+(Math.random()*0.6+0.6);
+            if(drops[i]*fontSize>height && Math.random()>0.975) drops[i]=0;
+        }
+        rafId=requestAnimationFrame(draw);
+    }
+    function startMatrix(){ if(matrixRunning) return; matrixRunning=true; canvas.style.opacity=0.12; if(!rafId) rafId=requestAnimationFrame(draw); }
+    function stopMatrix(){ matrixRunning=false; if(rafId){ cancelAnimationFrame(rafId); rafId=null; } canvas.style.opacity=0.12; }
+    const bgToggle=document.getElementById('bgToggle'), bgToggleLabel=document.getElementById('bgToggleLabel');
+    const saved=localStorage.getItem('matrix_bg');
+    function setToggleState(on){ if(on){ startMatrix(); bgToggle.classList.remove('off'); bgToggleLabel.textContent='Живые обои: Вкл'; bgToggle.setAttribute('aria-pressed','true'); localStorage.setItem('matrix_bg','1'); } else { stopMatrix(); bgToggle.classList.add('off'); bgToggleLabel.textContent='Живые обои: Выкл'; bgToggle.setAttribute('aria-pressed','false'); localStorage.setItem('matrix_bg','0'); } }
+    bgToggle.addEventListener('click', ()=> setToggleState(!matrixRunning));
+    window.addEventListener('resize', ()=> recompute());
+    window.addEventListener('keydown', e=> { if(e.key==='m'||e.key==='M') setToggleState(!matrixRunning); });
+    document.addEventListener('visibilitychange', ()=> { if(document.hidden){ if(rafId){ cancelAnimationFrame(rafId); rafId=null; } } else { if(matrixRunning && !rafId) rafId=requestAnimationFrame(draw); }});
+    if(saved==='0') setToggleState(false); else setToggleState(true);
+})(); // end matrix
+
+
+/* AJAX form submit + progress polling */
+(function(){
+    const form = document.getElementById('uploadForm');
+    const fileInput = document.getElementById('fileInput');
+    const reportArea = document.getElementById('reportArea');
+    const progressWrap = document.getElementById('progressWrap');
+    const progressBar = document.getElementById('progressBar');
+    const progressLabel = document.getElementById('progressLabel');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileNameEl = document.getElementById('fileName');
+    const contentHtml = document.getElementById('content-html');
+    const clearBtn = document.getElementById('clearBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    let pollInterval = null;
+    let currentFileName = '';
+
+    // Show file name immediately after selection
+    fileInput.addEventListener('change', ()=>{
+        if(!fileInput.files || fileInput.files.length===0){ fileInfo.style.display='none'; currentFileName=''; fileNameEl.textContent=''; return; }
+        const f = fileInput.files[0];
+        currentFileName = f.name || '';
+        fileNameEl.textContent = currentFileName;
+        fileInfo.style.display = 'block';
+    });
+
+    clearBtn.addEventListener('click', ()=> {
+        reportArea.style.display='none'; contentHtml.innerHTML=''; progressBar.style.width='0%';
+        fileInfo.style.display='none'; downloadBtn.style.display='none';
+        // reset file input value so change event will fire next time for the same file
+        try{ fileInput.value = ''; } catch(e) {}
+        currentFileName = '';
+    });
+
+    form.addEventListener('submit', async function(e){
+        e.preventDefault();
+        if(!fileInput.files || fileInput.files.length===0){ showError("Выберите файл для сканирования (.exe или .dll)."); return; }
+        const f = fileInput.files[0];
+        const name = (f && f.name) ? f.name.toLowerCase() : '';
+        if(!(name.endsWith('.exe') || name.endsWith('.dll'))){ showError("Неверное расширение — загрузите .exe или .dll файл."); return; }
+
+        // UI initial
+        if(!currentFileName) currentFileName = f.name;
+        fileNameEl.textContent = f.name; fileInfo.style.display='block';
+        reportArea.style.display='block';
+        progressWrap.style.display='block';
+        progressBar.style.width='2%';
+        progressLabel.textContent = 'Отправка...';
+
+        const fd = new FormData(); fd.append('file', f);
+
+        try {
+            const resp = await fetch(form.action, { method:'POST', body: fd });
+            if (!resp.ok) {
+                const err = await resp.json().catch(()=>null);
+                showError(err && err.error ? err.error : `Ошибка: ${resp.status}`);
+                return;
+            }
+            const data = await resp.json();
+            if (data.error) { showError(data.error); return; }
+            const job_id = data.job_id;
+            // start polling
+            progressLabel.textContent = 'Сканирование...';
+            pollInterval = setInterval(()=> pollStatus(job_id), 800);
+            // run one immediate poll
+            pollStatus(job_id);
+        } catch (err) {
+            showError("Ошибка отправки: " + String(err));
+            console.error(err);
+        }
+    });
+
+    async function pollStatus(job_id){
+        try {
+            const r = await fetch('/status/' + encodeURIComponent(job_id));
+            if (!r.ok) { showError("Не удалось получить статус."); stopPolling(); return; }
+            const j = await r.json();
+            const p = Math.max(0, Math.min(100, parseInt(j.progress || 0)));
+            progressBar.style.width = p + '%';
+            progressLabel.textContent = (j.status === 'running' ? `В процессе — ${p}%` : (j.status === 'queued' ? 'Ожидание...' : (j.status==='done' ? 'Завершено' : 'Ошибка')));
+
+            if (j.status === 'done') {
+                // always show HTML-styled result
+                if (j.result_html) {
+                    contentHtml.innerHTML = j.result_html;
+                } else if (j.result_text) {
+                    contentHtml.innerHTML = '<pre class="report">'+ escapeHtml(j.result_text) +'</pre>';
+                } else {
+                    contentHtml.innerHTML = '<div class="info-box">Нет результатов</div>';
+                }
+                contentHtml.style.display = 'block';
+                progressLabel.textContent = 'Готово';
+                progressBar.style.width = '100%';
+                // enable download button
+                downloadBtn.style.display = 'inline-block';
+                stopPolling();
+            } else if (j.status === 'error') {
+                showError("Ошибка на сервере: " + (j.error || "Unknown"));
+                stopPolling();
+            }
+        } catch (err) {
+            console.error("poll error", err);
+            showError("Ошибка при опросе статуса.");
+            stopPolling();
+        }
+    }
+
+    function stopPolling(){
+        if(pollInterval){ clearInterval(pollInterval); pollInterval = null; }
+    }
+
+    // Download report as standalone HTML file
+    downloadBtn.addEventListener('click', ()=>{
+        if(!contentHtml || !contentHtml.innerHTML) return;
+        const safeName = (currentFileName || 'report').replace(/[^a-zA-Z0-9._-]/g,'_');
+        const filename = safeName + '_report.html';
+        const doc = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Отчёт: ${escapeHtml(currentFileName)}</title><style>body{font-family:Arial,Helvetica,sans-serif;background:#0f172a;color:#e2e8f0;padding:18px} .container{max-width:980px;margin:auto;background:linear-gradient(180deg,#0f172a,#0b1220);padding:18px;border-radius:8px} pre{white-space:pre-wrap;word-wrap:break-word;background:#071029;padding:12px;border-radius:6px;color:#e2e8f0}</style></head><body><div class="container"><h1>Отчёт сканирования — ${escapeHtml(currentFileName)}</h1>${contentHtml.innerHTML}</div></body></html>`;
+        const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(()=> URL.revokeObjectURL(url), 5000);
+    });
+
+    function showError(msg){
+        const reportAreaLocal = document.getElementById('reportArea');
+        if (reportAreaLocal) {
+            reportAreaLocal.style.display='block';
+            reportAreaLocal.innerHTML = `<div class="error-box">${escapeHtml(msg)}</div>`;
+            downloadBtn.style.display = 'none';
+        } else {
+            alert(msg);
+        }
+    }
+
+    function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+})();
+</script>
+</body>
+</html>
